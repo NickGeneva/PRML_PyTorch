@@ -12,6 +12,91 @@ import torch as th
 from matplotlib import rc
 from torch.autograd import Variable
 
+class LeastSquaresReg():
+    def __init__(self, m, lmbda, basis='poly'):
+        '''
+        Least squares class
+        Args:
+            m (Variable) = number of basis functions
+            lmbda (Variable) = regularization parameter
+            basis (Variable) = type of basis function
+        '''
+        self.m = m
+        self.lmbda = lmbda
+        #Set up weight and mu arrays
+        if(m > 2):
+            self.mu = th.linspace(0,1,self.m-1).unsqueeze(1)
+            self.w0 = th.linspace(0,1,self.m).unsqueeze(1)
+        elif(m > 1):
+            self.mu = th.FloatTensor([[0.5]])
+            self.w0 = th.linspace(0,1,self.m).unsqueeze(1)
+        else:
+            self.mu = 0
+            self.w0 = th.FloatTensor([[0]])
+        
+        self.basis = basis
+
+    def calcRegression(self, X, T):
+        '''
+        Calculates the weights of the linear model using minimization of least squares
+        Args:
+            X (th.DoubleTensor) = Nx1 column vector of target points X-coords
+            T (th.DoubleTensor) = NxL matrix of targer values with L different data sets
+        '''
+        phi = self.getBasis(X)
+        #Eq. 3.28
+        w = th.mm(th.transpose(phi,0,1), T.type(th.DoubleTensor)) #NxM matrix (multi-output approach)
+        w2 = th.mm(th.transpose(phi,0,1), phi) #MxM matrix
+        w2 = th.inverse(self.lmbda*th.eye(self.m).type(th.DoubleTensor) + w2)
+        self.w0 = th.mm(w2,w)
+
+    def getBasis(self, X):
+        '''
+        Generates basis matrix, current supported basis functions are polynomial and guassian
+        Args:
+            X (th.DoubleTensor) = Nx1 column vector of target points X-coords
+        Returns:
+            phi (th.DoubleTensor) = NxM matrix of basis functions for each point
+        '''
+        if(self.basis == 'poly'): #Polynomial basis
+            if(self.m > 1):
+                exp = th.linspace(0,self.m-1,self.m).unsqueeze(0).expand(X.size(0),self.m).type(th.DoubleTensor)
+                phi = th.pow(X.expand(X.size(0),self.m), exp)
+            else:
+                exp = th.DoubleTensor([[0]])
+                phi = th.pow(X.expand(X.size(0),self.m),0)
+        else: #Guassian basis
+            s = 1.0/(self.m-1)
+            mu = th.transpose(self.mu,0,1).type(th.DoubleTensor)
+            phi = th.DoubleTensor(X.size(0),self.m).zero_() + 1
+    
+            phi0 = th.pow(X.expand(X.size(0),self.m-1)-mu.expand(X.size(0),self.m-1),2)
+            phi[:,1::] = th.exp(-phi0/(2.0*s**2))
+        
+        return phi
+
+    def getWeights(self):
+        '''
+        Get regression weights
+        Returns:
+            phi (th.DoubleTensor) = NxM matrix of basis functions for each point
+        '''
+        return self.w0
+
+    def getTestError(self, X, T):
+        '''
+        Calculate RMS test error
+        Args:
+            X (th.DoubleTensor) = Nx1 column vector of test points X-coords
+            T (th.DoubleTensor) = Nx1 matrix of test values with L different data sets
+        Returns:
+            err (Variable) = RMS error 
+        '''
+        N = T.size(0)
+        phi = th.mm(self.getBasis(X),self.w0)
+        err = th.sqrt(th.sum(th.pow(T - phi,2), 0)/N) #Eq. 1.3
+        return Variable(err).data.numpy()
+        
 def generateData(L,N,std):
     """Generates a set of synthetic data evenly distributed along the X axis
         with a target function of sin(2*pi*x) with guassian noise in the Y direction
@@ -20,18 +105,20 @@ def generateData(L,N,std):
         N (Variable) = Number of points in data set
         std (Array) = standard deviation of guassian noise
     Returns:
-        X (th.FloatTensor) = NxL matrix of X coords of target points
-        T (th.FloatTensor) = NxL matrix of Y coord of target points
+        X (th.DoubleTensor) = NxL matrix of X coords of target points
+        T (th.DoubleTensor) = NxL matrix of Y coord of target points
     """
-    step = 1.0/(N-1)
-    X1 = th.arange(0,1,step).expand(1,N)
-    X1 = th.transpose(X1,0,1)
-    mu = th.sin(2.0*np.pi*X1).expand(N,L)
-    T = th.normal(mu,std)
+    X = th.linspace(0,1,N).unsqueeze(1).type(th.DoubleTensor)
+    mu = th.sin(2.0*np.pi*X).expand(N,L)
+    if(std > 0):
+        T = th.normal(mu,std).type(th.DoubleTensor)
+    else:
+        T = mu.type(th.DoubleTensor)
+
     #Plot a sample data set
     #plotGeneratedData(X0,Y0,Variable(X1).data.numpy(),Variable(T[:,0]).data.numpy(), std)
 
-    return [X1, T]
+    return [X, T]
 
 def plotGeneratedData(X0,Y0,X1,Y1,std):
     """Plot generated random data to be used for regression like Figure A.6, pg. 683 in PRML
@@ -68,79 +155,31 @@ def plotGeneratedData(X0,Y0,X1,Y1,std):
 
     plt.show()
 
-def regression(X,T,M,P,lamb):
-    '''Calculates multi-output regression with guassian basis, assumes all data sets has
-        the same X-coordinates.
-  
-      Args:
-          X (th.FloatTensor) = Nx1 column vector of target points X-coords
-          T (th.FloatTensor) = NxL matrix of targer values with L different data sets
-          M (Variable) = Number of regression basis (includes phi0)
-          P (Variable) = Number of points to calculate the solved regression function with
-          lamb (Variable) = regularization term to control impact of regularization error
-    Returns:
-        X0 (th.FloatTensor) = X-coord of regressions
-        Y (th.FloatTensor) = PxL matrix of regression points for each data set
-    '''
-    N = T.size(0) #Number of data points in sample
-    L = T.size(1) #Number of samples
-
-    #Set up basis functions
-    mu = th.FloatTensor(1,M-1).zero_()
-    mu[0,:] = th.linspace(0,1,M-1)
-    s = 1.0/M #scale factor
-    phi = th.FloatTensor(N,M).zero_() + 1
-    phi[:,1::] = th.exp(-th.pow(X.expand(N,M-1)-mu.expand(N,M-1),2)/(2*s**2))
-   
-    #Determine regression basis weights
-    w = th.mm(th.transpose(phi,0,1),T) #NxM matrix (multi-output approach)
-    w2 = th.mm(th.transpose(phi,0,1),phi) #MxM matrix
-    w2 = th.inverse(lamb*th.eye(M,M) + w2)
-    w = th.mm(w2,w)
-
-    #calculate regression points
-    X0 = th.FloatTensor(P,1).zero_()
-    X0[:,0] = th.linspace(0,1,P)
-    phi = th.FloatTensor(P,M).zero_() + 1
-    phi[:,1::] = th.exp(-th.pow(X0.expand(P,M-1)-mu.expand(P,M-1),2)/(2*s**2))
-    
-    return [X0, th.mm(phi,w)]
-
-
 if __name__ == '__main__':
     plt.close('all')
     mlp.rcParams['font.family'] = ['times new roman'] # default is sans-serif
     rc('text', usetex=True)
-    X,T = generateData(100,25,0.3)
-    X0,Y0 = regression(X,T,25,100,np.exp(2.6))
-    X1,Y1 = regression(X,T,25,100,np.exp(-0.31))
-    X2,Y2 = regression(X,T,25,100,np.exp(-2.4))
 
     # Two subplots, unpack the axes array immediately
-    f, ax = plt.subplots(3, 2)
+    f, ax = plt.subplots(3, 2, figsize=(8, 7))
     f.suptitle('Figure 3.5, pg. 150', fontsize=14)
 
-    x = Variable(X0).data.numpy()
-    #lambda 1
-    for i in range(0,20): #Plot 20 of the regressions
-        ax[0,0].plot(Variable(X0).data.numpy(), Variable(Y0[:,i]).data.numpy(), '-r', lw=0.2)
-    ax[0,0].text(0.6, 1, r'$ln \lambda = 2.6$')
-    ax[0,1].plot(x, np.sin(2.0*np.pi*x),'-g')
-    ax[0,1].plot(x, Variable(th.sum(Y0,1)/100).data.numpy(),'-r')
+    X_train,T_train = generateData(100,25,0.3)
+    X_test,T_test = generateData(1,100,0)
+    X0 = Variable(X_test).data.numpy()
+    M = 25
+    lam = [2.6, -0.31, -2.4] #ln(lambda) values
 
-    #lambda 2
-    for i in range(0,20):
-        ax[1,0].plot(Variable(X1).data.numpy(), Variable(Y1[:,i]).data.numpy(), '-r', lw=0.2)
-    ax[1,0].text(0.6, 1, r'$ln \lambda = -0.31$')
-    ax[1,1].plot(x, np.sin(2.0*np.pi*x),'-g')
-    ax[1,1].plot(x, Variable(th.sum(Y1,1)/100).data.numpy(),'-r')
+    for idx, val in enumerate(lam):
+        lsr = LeastSquaresReg(M, np.exp(val), basis='guassian')
+        lsr.calcRegression(X_train, T_train)
+        Y_fit = th.mm(lsr.getBasis(X_test), lsr.getWeights())
 
-    #lambda 3
-    for i in range(0,20):
-        ax[2,0].plot(Variable(X2).data.numpy(), Variable(Y2[:,i]).data.numpy(), '-r', lw=0.2)
-    ax[2,0].text(0.6, 1, r'$ln \lambda = -2.4$')
-    ax[2,1].plot(x, np.sin(2.0*np.pi*x),'-g')
-    ax[2,1].plot(x, Variable(th.sum(Y2,1)/100).data.numpy(),'-r')
+        for i in range(0,20): #Plot 20 of the regressions
+            ax[idx,0].plot(X0, Variable(Y_fit[:,i]).data.numpy(), '-r', lw=0.2)
+        ax[idx,0].text(0.6, 1, r'$ln \lambda = 2.6$')
+        ax[idx,1].plot(X0, np.sin(2.0*np.pi*X0),'-g')
+        ax[idx,1].plot(X0, Variable(th.sum(Y_fit,1)/100).data.numpy(),'-r')
 
     for (m,n), subplot in np.ndenumerate(ax):
         ax[m,n].set_xlim([0,1])

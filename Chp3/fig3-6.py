@@ -13,10 +13,17 @@ from matplotlib import rc
 from torch.autograd import Variable
 
 class LeastSquaresReg():
-    def __init__(self, m, lmbda):
+    def __init__(self, m, lmbda, basis='poly'):
+        '''
+        Least squares class
+        Args:
+            m (Variable) = number of basis functions
+            lmbda (Variable) = regularization parameter
+            basis (Variable) = type of basis function
+        '''
         self.m = m
         self.lmbda = lmbda
-        
+        #Set up weight and mu arrays
         if(m > 2):
             self.mu = th.linspace(0,1,self.m-1).unsqueeze(1)
             self.w0 = th.linspace(0,1,self.m).unsqueeze(1)
@@ -26,91 +33,89 @@ class LeastSquaresReg():
         else:
             self.mu = 0
             self.w0 = th.FloatTensor([[0]])
+        
+        self.basis = basis
 
     def calcRegression(self, X, T):
-        phi = self.guassianModel(X)
-
-        w = th.mm(th.transpose(phi,0,1),T) #NxM matrix (multi-output approach)
-        w2 = th.mm(th.transpose(phi,0,1),phi) #MxM matrix
-        w2 = th.inverse(self.lmbda*th.eye(self.m) + w2)
+        '''
+        Calculates the weights of the linear model using minimization of least squares
+        Args:
+            X (th.DoubleTensor) = Nx1 column vector of target points X-coords
+            T (th.DoubleTensor) = NxL matrix of targer values with L different data sets
+        '''
+        phi = self.getBasis(X)
+        #Eq. 3.28
+        w = th.mm(th.transpose(phi,0,1), T.type(th.DoubleTensor)) #NxM matrix (multi-output approach)
+        w2 = th.mm(th.transpose(phi,0,1), phi) #MxM matrix
+        w2 = th.inverse(self.lmbda*th.eye(self.m).type(th.DoubleTensor) + w2)
         self.w0 = th.mm(w2,w)
 
-    def polyModel(self, X):
-        s = 1.0/self.m
-        if(self.m > 1):
-            exp = th.linspace(0,self.m-1,self.m).unsqueeze(0).expand(X.size(0),self.m)
-            phi = th.pow(X.expand(X.size(0),self.m), exp)
-        else:
-            exp = th.FloatTensor([[0]])
-            phi = th.pow(X.expand(X.size(0),self.m),0)
-        return phi
-
-    def guassianModel(self, X):
-        #X = number of points
-        s = 1.0/(self.m-1)
-        mu = th.transpose(self.mu,0,1)
-        phi = th.FloatTensor(X.size(0),self.m).zero_() + 1
-  
-        phi0 = th.pow(X.expand(X.size(0),self.m-1)-mu.expand(X.size(0),self.m-1),2)
-        phi[:,1::] = th.exp(-phi0/(2.0*s**2))
+    def getBasis(self, X):
+        '''
+        Generates basis matrix, current supported basis functions are polynomial and guassian
+        Args:
+            X (th.DoubleTensor) = Nx1 column vector of target points X-coords
+        Returns:
+            phi (th.DoubleTensor) = NxM matrix of basis functions for each point
+        '''
+        if(self.basis == 'poly'): #Polynomial basis
+            if(self.m > 1):
+                exp = th.linspace(0,self.m-1,self.m).unsqueeze(0).expand(X.size(0),self.m).type(th.DoubleTensor)
+                phi = th.pow(X.expand(X.size(0),self.m), exp)
+            else:
+                exp = th.DoubleTensor([[0]])
+                phi = th.pow(X.expand(X.size(0),self.m),0)
+        else: #Guassian basis
+            s = 1.0/(self.m-1)
+            mu = th.transpose(self.mu,0,1).type(th.DoubleTensor)
+            phi = th.DoubleTensor(X.size(0),self.m).zero_() + 1
+    
+            phi0 = th.pow(X.expand(X.size(0),self.m-1)-mu.expand(X.size(0),self.m-1),2)
+            phi[:,1::] = th.exp(-phi0/(2.0*s**2))
+        
         return phi
 
     def getWeights(self):
+        '''
+        Get regression weights
+        Returns:
+            phi (th.DoubleTensor) = NxM matrix of basis functions for each point
+        '''
         return self.w0
 
     def getTestError(self, X, T):
+        '''
+        Calculate RMS test error
+        Args:
+            X (th.DoubleTensor) = Nx1 column vector of test points X-coords
+            T (th.DoubleTensor) = Nx1 matrix of test values with L different data sets
+        Returns:
+            err (Variable) = RMS error 
+        '''
         N = T.size(0)
-        phi = th.mv(self.guassianModel(X),self.w0)
-        err = th.sum(th.pow(T - phi,2), 0)/N
+        phi = th.mm(self.getBasis(X),self.w0)
+        err = th.sqrt(th.sum(th.pow(T - phi,2), 0)/N) #Eq. 1.3
         return Variable(err).data.numpy()
-
+        
 def generateData(L,N,std):
-    X1 = th.linspace(0,1,N).unsqueeze(1)
-    mu = th.sin(2.0*np.pi*X1).expand(N,L)
-    if(std > 0):
-        T = th.normal(mu,std)
-    else:
-        T = mu
-
-    return [X1, T]
-
-def regression(X,T,M,P,lamb):
-    '''Calculates multi-output regression with guassian basis, assumes all data sets has
-        the same X-coordinates.
-  
-      Args:
-          X (th.FloatTensor) = Nx1 column vector of target points X-coords
-          T (th.FloatTensor) = NxL matrix of targer values with L different data sets
-          M (Variable) = Number of regression basis (includes phi0)
-          P (Variable) = Number of points to calculate the solved regression function with
-          lamb (Variable) = regularization term to control impact of regularization error
+    """Generates a set of synthetic data evenly distributed along the X axis
+        with a target function of sin(2*pi*x) with guassian noise in the Y direction
+    Args:
+        L (Variable) = Number of data sets desired
+        N (Variable) = Number of points in data set
+        std (Array) = standard deviation of guassian noise
     Returns:
-        X0 (th.FloatTensor) = X-coord of regressions
-        Y (th.FloatTensor) = PxL matrix of regression points for each data set
-    '''
-    N = T.size(0) #Number of data points in sample
-    L = T.size(1) #Number of samples
+        X (th.DoubleTensor) = NxL matrix of X coords of target points
+        T (th.DoubleTensor) = NxL matrix of Y coord of target points
+    """
+    X = th.linspace(0,1,N).unsqueeze(1).type(th.DoubleTensor)
+    mu = th.sin(2.0*np.pi*X).expand(N,L)
+    if(std > 0):
+        T = th.normal(mu,std).type(th.DoubleTensor)
+    else:
+        T = mu.type(th.DoubleTensor)
 
-    #Set up basis functions
-    mu = th.FloatTensor(1,M-1).zero_()
-    mu[0,:] = th.linspace(0,1,M-1)
-    s = 1.0/M #scale factor
-    phi = th.FloatTensor(N,M).zero_() + 1
-    phi[:,1::] = th.exp(-0.5*th.pow(X.expand(N,M-1)-mu.expand(N,M-1),2)/(s**2))
-   
-    #Determine regression basis weights
-    w = th.mm(th.transpose(phi,0,1),T) #MxL matrix (multi-output approach)
-    w2 = th.mm(th.transpose(phi,0,1),phi) #MxM matrix
-    w2 = th.inverse(lamb*th.eye(M,M) + w2)
-    w = th.mm(w2,w)
-
-    #calculate regression points
-    X0 = th.FloatTensor(P,1).zero_()
-    X0[:,0] = th.linspace(0,1,P)
-    phi = th.FloatTensor(P,M).zero_() + 1
-    phi[:,1::] = th.exp(-0.5*th.pow(X0.expand(P,M-1)-mu.expand(P,M-1),2)/(s**2))
-    
-    return [X0, th.mm(phi,w)]
+    return [X, T]
 
 if __name__ == '__main__':
     plt.close('all')
@@ -124,14 +129,14 @@ if __name__ == '__main__':
     X_test,T_test = generateData(1,1000,0.3) #Generate test data
 
     gammas = np.linspace(-2.5,1.5,50)
-    Y0 = th.FloatTensor(len(gammas),P,L).zero_()
-    Y1 = th.FloatTensor(len(gammas),1000,L).zero_()
+    Y0 = th.DoubleTensor(len(gammas),P,L).zero_()
+    Y1 = th.DoubleTensor(len(gammas),1000,L).zero_()
 
     for idx, val in enumerate(gammas):
-        lsr = LeastSquaresReg(M, np.exp(val))
+        lsr = LeastSquaresReg(M, np.exp(val), basis='guassian')
         lsr.calcRegression(X_train,T_train)
-        Y0[idx,:,:] = th.mm(lsr.guassianModel(X_train), lsr.getWeights().squeeze())
-        Y1[idx,:,:] = th.mm(lsr.guassianModel(X_test), lsr.getWeights())
+        Y0[idx,:,:] = th.mm(lsr.getBasis(X_train), lsr.getWeights().squeeze())
+        Y1[idx,:,:] = th.mm(lsr.getBasis(X_test), lsr.getWeights())
 
     Y0_avg = th.squeeze(th.sum(Y0,2))/L #Average over all training sets
     X, H = generateData(1,P,0)
@@ -147,6 +152,7 @@ if __name__ == '__main__':
     TERR = th.squeeze(th.sum(th.sum(TERR,1),2))/(1000*L)
 
     # Two subplots, unpack the axes array immediately
+    plt.figure(figsize=(8, 5))
     plt.suptitle('Figure 3.6, pg. 151', fontsize=14)
     line1, = plt.plot(gammas, Variable(BIAS).data.numpy(), '-r',label=r'$\left( bias \right)^2$')
     line2, = plt.plot(gammas, Variable(VAR).data.numpy(), '-b',label=r'$variance$')

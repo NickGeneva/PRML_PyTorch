@@ -28,11 +28,11 @@ class LeastSquaresReg():
             self.mu = th.linspace(0,1,self.m-1).unsqueeze(1)
             self.w0 = th.linspace(0,1,self.m).unsqueeze(1)
         elif(m > 1):
-            self.mu = th.FloatTensor([[0.5]])
+            self.mu = th.DoubleTensor([[0.5]])
             self.w0 = th.linspace(0,1,self.m).unsqueeze(1)
         else:
             self.mu = 0
-            self.w0 = th.FloatTensor([[0]])
+            self.w0 = th.DoubleTensor([[0]])
         
         self.basis = basis
 
@@ -67,7 +67,7 @@ class LeastSquaresReg():
                 phi = th.pow(X.expand(X.size(0),self.m),0)
         else: #Guassian basis
             s = 1.0/(self.m-1)
-            mu = th.transpose(self.mu,0,1)
+            mu = th.transpose(self.mu,0,1).type(th.DoubleTensor)
             phi = th.DoubleTensor(X.size(0),self.m).zero_() + 1
     
             phi0 = th.pow(X.expand(X.size(0),self.m-1)-mu.expand(X.size(0),self.m-1),2)
@@ -79,7 +79,7 @@ class LeastSquaresReg():
         '''
         Get regression weights
         Returns:
-            phi (th.DoubleTensor) = NxM matrix of basis functions for each point
+            w0 (th.DoubleTensor) = MxL matrix of basis functions for each point
         '''
         return self.w0
 
