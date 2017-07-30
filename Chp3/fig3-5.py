@@ -15,17 +15,14 @@ from torch.autograd import Variable
 def generateData(L,N,std):
     """Generates a set of synthetic data evenly distributed along the X axis
         with a target function of sin(2*pi*x) with guassian noise in the Y direction
-
     Args:
         L (Variable) = Number of data sets desired
         N (Variable) = Number of points in data set
         std (Array) = standard deviation of guassian noise
-
     Returns:
         X (th.FloatTensor) = NxL matrix of X coords of target points
         T (th.FloatTensor) = NxL matrix of Y coord of target points
     """
-    d = th.FloatTensor(L,N)
     step = 1.0/(N-1)
     X1 = th.arange(0,1,step).expand(1,N)
     X1 = th.transpose(X1,0,1)

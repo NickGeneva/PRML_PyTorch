@@ -11,11 +11,7 @@ import numpy as np
 import torch as th
 from matplotlib import rc
 from torch.autograd import Variable
-
-#Tell python were else to look for packages
-sys.path.insert(0,"/home/nick/Documents/GPtorch/")
-from GPtorch import densities
-
+from gptorch import densities
 
 def plot_st():
     delta = 0.1
@@ -40,7 +36,6 @@ def plot_st():
     f.suptitle('Figure 2.15, pg. 103', fontsize=14)
     
     #Profile plots
-    #line1, = ax2.plot(x0,P1,'-r',label=r'$p(x_a | x_b = 0.7)$')
     line1, = ax.plot(x0,P1,'-r',label=r'$\nu = 0.1$')
     line2, = ax.plot(x0,P2,'-b',label=r'$\nu = 1.0$')
     line3, = ax.plot(x0,P3,'-g',label=r'$\nu \rightarrow \infty$')

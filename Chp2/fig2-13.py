@@ -4,18 +4,13 @@ ngeneva@nd.edu
 July 11, 2017
 '''
 import sys
-
 import matplotlib as mlp
 import matplotlib.pyplot as plt
 import numpy as np
 import torch as th
 from matplotlib import rc
 from torch.autograd import Variable
-
-#Tell python were else to look for packages
-sys.path.insert(0,"/home/nick/Documents/GPtorch/")
 from GPtorch import densities
-
 
 def plot_gamma():
     delta = 0.025
