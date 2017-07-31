@@ -192,7 +192,7 @@ if __name__ == '__main__':
 
     #No Outliers
     m, b = cl.classLeastSquares(X[:2*N,:],T[:2*N,:])
-    m2, b2 = cl.classLogRegressionAutograd(X[:2*N,:],T[:2*N,:])
+    m2, b2 = cl.classLogRegression(X[:2*N,:],T[:2*N,:])
     x_n = np.linspace(-5,9,10)
 
     ax[0].scatter(X0[0,:N], Y0[0,:N], c='r', marker='x')
@@ -203,7 +203,7 @@ if __name__ == '__main__':
 
     #With Outliers
     m, b = cl.classLeastSquares(X,T)
-    m2, b2 = cl.classLogRegressionAutograd(X,T)
+    m2, b2 = cl.classLogRegression(X,T)
     x_n = np.linspace(-5,9,10)
 
     ax[1].scatter(X0[0,:N], Y0[0,:N], c='r', marker='x')
