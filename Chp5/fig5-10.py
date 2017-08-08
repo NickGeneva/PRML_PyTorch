@@ -27,10 +27,10 @@ class simpleNN():
             th.nn.Tanh(),
             th.nn.Linear(H, D_out),
         ).double()
-
+        #Initialize weights
         for x in self.model.modules():
             if isinstance(x, th.nn.Linear):
-                x.weight.data = th.normal(means=th.zeros(x.weight.size())).type(dtype)
+                x.weight.data = th.normal(means=th.zeros(x.weight.size()), std=th.zeros(x.weight.size())+np.sqrt(10)).type(dtype)
                 x.bias.data = th.zeros(x.bias.size()).type(dtype)
 
         self.H = H
@@ -71,7 +71,7 @@ class simpleNN():
                 param.data -= self.lr * param.grad.data
 
             idx+=1
-            if(idx > 1e6): #Give up after 1e6 attempts to train
+            if(idx > 1e4): #Give up after 1e4 attempts to train
                 print('Interation break')
                 break
 
@@ -98,9 +98,10 @@ class simpleNN():
         Returns:
             loss (Variable): loss error for the given test set
         """
-        x_t = Variable(x_test, requires_grad=False)
+        x_test = Variable(x_test, requires_grad=False)
+        t_test = Variable(t_test, requires_grad=False)
         #Feed inputes into neural network
-        t_pred = self.model(x_t)
+        t_pred = self.model(x_test)
         #Now lets compute out loss
         loss = self.loss_fn(t_pred, t_test)
         return loss
@@ -131,31 +132,35 @@ if __name__ == '__main__':
     rc('text', usetex=True)
 
     #Set up subplots
-    f, ax = plt.subplots(1, 3, figsize=(9, 3))
-    f.suptitle('Figure 5.9 pg. 257', fontsize=14)
+    f, ax = plt.subplots(1, 1, figsize=(6, 4))
+    f.suptitle('Figure 5.10 pg. 257', fontsize=14)
 
     X_train,T_train = generateData(1,10,0.3)
     X_test,T_test = generateData(1,100,0)
-    hidden_units = [1, 3, 10] #hidden units to use
-    D_in, D_out, lr, err = 1, 1, 1e-3, 1e-5 #Dimension in, Dimension out, learning rate, error threshold
+    hidden_units = np.arange(10)+1 #hidden units to use
+    interations = 30 #Number of interation on each hidden unit to do
+    loss = np.zeros(interations)
+
+    D_in, D_out, lr, err = 1, 1, 2e-3, 1e-5 #Dimension in, Dimension out, learning rate, error threshold
 
     #Train our NN for each set of hidden points
     for idx, H in enumerate(hidden_units):
-        sNN = simpleNN(D_in, D_out, H, lr)
-        sNN.trainNN(X_train.expand(10,D_in), T_train.expand(10,D_in), err)
+        for i in range(interations):
+            sNN = simpleNN(D_in, D_out, H, lr)
+            sNN.trainNN(X_train.expand(10,D_in), T_train.expand(10,D_in), err)
+            loss[i] = sNN.getLoss(X_test, T_test).data.numpy() #Get test loss
 
-        y_pred = sNN.getTPred(X_test.expand(X_test.size(0),D_in))
+        x0 = np.zeros(interations)+H
+        ax.scatter(x0, loss, c='b', marker='+', linewidth='0.7')
 
-        ax[idx].plot(Variable(X_test).data.numpy(), y_pred.data.numpy(), '-r')
-        ax[idx].plot(Variable(X_train).data.numpy(), Variable(T_train).data.numpy(), 'xb')
-        ax[idx].text(0.7, 1.0, r'$M='+str(H)+'$')
+    ax.set_xlim([0,11])
+    ax.set_xticks(np.linspace(0,10,6)) 
+    ax.set_xlabel(r'$M$')
 
-    for n, subplot in np.ndenumerate(ax):
-        ax[n].set_xlim([-0.1,1.1])
-        ax[n].set_xticks([0, 1]) 
-        ax[n].set_ylim([-1.5,1.5])
-        ax[n].set_yticks([-1, 0, 1]) 
+    ax.set_ylim([0,70])
+    ax.set_ylabel(r'$\sum \left| y - t\right|^2$')
+    #ax.set_yticks([-1, 0, 1]) 
     
     plt.tight_layout(pad=0.4, w_pad=0.5, h_pad=0.5, rect=[0,0, 1, 0.9])
-    #plt.savefig('Figure5_9.png')
+    #plt.savefig('Figure5_10.png')
     plt.show()
