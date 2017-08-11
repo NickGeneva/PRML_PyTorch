@@ -68,7 +68,7 @@ class simpleNN():
             loss.backward()
 
             for param in self.model.parameters():
-                param.data -= self.lr * param.grad.data
+                param.data -= self.lr * param.grad.data #Using Batch sharpest decent
 
             idx+=1
             if(idx > 1e4): #Give up after 1e4 attempts to train

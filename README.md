@@ -10,7 +10,3 @@ Python Packages Needed:
  * [MatPlotLib](https://matplotlib.org/)
  * [GPTorch](https://github.com/bmmi/gptorch)
  * NumPy
-
-Current Known Bugs:
-
- * Figure 3.6
