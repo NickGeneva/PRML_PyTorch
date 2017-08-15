@@ -274,5 +274,5 @@ if __name__ == '__main__':
     ax.set_yticks([-2, -1, 0, 1, 2])
 
     plt.tight_layout(pad=0.4, w_pad=0.5, h_pad=0.5, rect=[0,0, 1, 0.9])
-    #plt.savefig('Figure5_4.png')
+    #plt.savefig('Figure5_04.png')
     plt.show()

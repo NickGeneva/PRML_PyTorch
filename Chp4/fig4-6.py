@@ -187,5 +187,5 @@ if __name__ == '__main__':
             ax0.set_xlim([-3,8])
             ax0.set_ylim([-3,4.5])
     plt.tight_layout(rect=[0,0, 1.0, 0.93])
-    #plt.savefig('Figure4_6.png')
+    #plt.savefig('Figure4_06.png')
     plt.show()

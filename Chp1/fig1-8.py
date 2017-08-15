@@ -148,5 +148,5 @@ if __name__ == '__main__':
 
     plt.legend(loc=1)
     plt.tight_layout(rect=[0,0, 1.0, 0.93])
-    #plt.savefig('Figure1_8.png')
+    #plt.savefig('Figure1_08.png')
     plt.show()

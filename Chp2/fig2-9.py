@@ -66,7 +66,7 @@ def plot_guassian():
     ax2.set_xlabel(r'$x_a$')
     ax2.legend(handles=[line1, line2], loc=2)
 
-    #plt.savefig('Figure2_9.png')
+    #plt.savefig('Figure2_09.png')
     plt.show()
 
 

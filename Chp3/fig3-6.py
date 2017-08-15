@@ -163,5 +163,5 @@ if __name__ == '__main__':
     plt.ylim([0,0.15])
     plt.xlabel(r'$ln(\lambda)$')
     plt.legend(handles=[line1, line2, line3, line4], loc=2)
-    #plt.savefig('Figure3_6.png')
+    #plt.savefig('Figure3_06.png')
     plt.show()

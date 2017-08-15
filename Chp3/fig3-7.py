@@ -324,5 +324,5 @@ if __name__ == '__main__':
     ax[0,1].set_title('prior/posterior')
     ax[0,2].set_title('data space')
     plt.tight_layout(rect=[0,0, 1, 0.93])
-    #plt.savefig('Figure3_7.png')
+    #plt.savefig('Figure3_07.png')
     plt.show()
