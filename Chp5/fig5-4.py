@@ -18,7 +18,11 @@ dtype = th.DoubleTensor
 class BabyNet(th.nn.Module):
     def __init__(self, D_in, H, D_out):
         """
-        
+        Small 2 layer Neural Net
+        Args:
+            D_in (Int) = Number of input parameters
+            H (Int) = Number of hidden paramters
+            D_out (Int) = Number of output parameters
         """
         super(BabyNet, self).__init__()
         self.linear1 = th.nn.Linear(D_in, H)
@@ -27,7 +31,11 @@ class BabyNet(th.nn.Module):
 
     def forward(self, x):
         """
-        
+        Forward pass of the neural network
+        Args:
+            x (th.DoubleTensor): [N x D_in] column matrix of training inputs
+        Returns:
+            out (th.DoubleTensor): [N x D_out] matrix of neural network outputs
         """
         lin1 = self.f1(self.linear1(x))
         out = self.linear2(lin1)
@@ -35,6 +43,11 @@ class BabyNet(th.nn.Module):
 
     def hiddenForward(self, x):
         """
+        Calculates the value of the hidden parameters in the neural network
+        Args:
+            x (th.DoubleTensor): [N x D_in] column matrix of training inputs
+        Returns:
+            out (th.DoubleTensor): [N x H] matrix of neural network outputs
         """
         lin1 = self.f1(self.linear1(x))
         return lin1
@@ -44,10 +57,9 @@ class simpleNN():
         """Class for a simple 2 layer neural network
         Args:
             D_in (Int) = Number of input parameters
-            D_out (Int) = Number of output parameters
             H (Int) = Number of hidden paramters
+            D_out (Int) = Number of output parameters
         """
-
         self.model = BabyNet(D_in, H, D_out).double()
 
         for x in self.model.modules():
