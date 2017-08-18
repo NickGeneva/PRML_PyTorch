@@ -107,8 +107,8 @@ class simpleNN():
 
 def generateData(L,N,std):
     """Generates a set of synthetic data evenly distributed along the X axis
-        with a target function of (2(x - 0.5))^3 + 0.75*(x-0.5)^2 - x + 1.0 with 
-        guassian noise in the Y direction
+        with a target function of X + 0.3sin(2*pi*X) with 
+        uniform noise from [-0.1, 0.1] in the Y direction
     Args:
         L (Int) = Number of data sets desired
         N (Int) = Number of points in data set
@@ -118,11 +118,8 @@ def generateData(L,N,std):
         T (th.DoubleTensor) = [N x L] matrix of Y coord of target points
     """
     X = th.linspace(0,1,N).unsqueeze(1).type(dtype)
-    mu =  (th.pow(2*(X-0.5),3) + th.pow(X-0.5,2) - 0.75*(X-0.5) + 0.5).expand(N,L)
-    if(std > 0):
-        T = th.normal(mu,std).type(th.DoubleTensor)
-    else:
-        T = mu.type(th.DoubleTensor)
+    mu = X + 0.3*th.sin(2.0*np.pi*X).expand(N,L).type(dtype)
+    T = mu + (0.2*th.rand(N,L).type(dtype) - 0.1)
 
     return X,T
 
@@ -137,7 +134,6 @@ if __name__ == '__main__':
 
     X_train,T_train = generateData(1,100,0.05)
     X_test,T_test = generateData(1,100,0)
-    hidden_units = [1, 3, 10] #hidden units to use
     D_in, H, D_out = 1, 10, 1 #Dimension in, Hidden units, Dimension out 
     lr, err = 1e-3, 1e-4 #learning rate, error threshold
 
@@ -148,6 +144,7 @@ if __name__ == '__main__':
     ax[0].plot(Variable(X_test).data.numpy(), y_pred.data.numpy(), '-r')
 
     #Transform training data such that there are multiple solutions at one given input
+    #Results in a inverse problem which leads to poor modeling
     lr, err = 1e-3, 1e-5 #learning rate, error threshold
     sNN = simpleNN(D_in, H, D_out, lr)
     sNN.trainNN(T_train, X_train, err)
