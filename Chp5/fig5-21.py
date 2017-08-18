@@ -172,7 +172,7 @@ class simpleNN():
                 #print('=========',param.grad)
                 param.data -= self.lr * param.grad.data #Using Batch sharpest decent
             
-            print(loss)
+            print("Index: "+str(idx)+", loss="+str(loss.data[0]))
             #First calculate mixing coefficients
             # pi_t = th.exp(y_pred[:,0])+th.exp(y_pred[:,1])+th.exp(y_pred[:,2])
             # p1 = th.exp(y_pred[:,0])/pi_t
@@ -218,7 +218,7 @@ class simpleNN():
             #     param.data -= self.lr * param.grad.data #Using Batch sharpest decent
 
             idx+=1
-            if(idx > 1e6): #Give up after 1e6 attempts to train
+            if(idx > 5e4): #Give up after 1e6 attempts to train
                 print('Interation break')
                 break
 
@@ -330,10 +330,10 @@ if __name__ == '__main__':
     f, ax = plt.subplots(2, 2, figsize=(8, 7))
     f.suptitle('Figure 5.21 pg. 276', fontsize=14)
 
-    T_train, X_train = generateData(1,100,0.05)
+    T_train, X_train = generateData(1,300,0.05)
     X_test, T_test = generateData(1,100,0)
     D_in, H, D_out = 1, 5, 9 #Dimension in, Hidden units, Dimension out 
-    lr, err = 1e-6, 1e-5 #learning rate, error threshold
+    lr, err = 1e-4, 1e-5 #learning rate, error threshold
 
     sNN = simpleNN(D_in, H, D_out, lr)
     sNN.trainNN(X_train[:,0].unsqueeze(1), T_train[:,0].unsqueeze(1), err)
