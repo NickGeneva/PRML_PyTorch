@@ -59,7 +59,16 @@ class MixDensity(Function):
 
     # Note that both forward and backward are @staticmethods
     def forward(self, a_pi, a_mu, a_sigma, t):
-        #Save inputs for backward prop
+        """
+        Calculates the forward pass of the loss function (Bishop Eq.5.153)
+        Args:
+            a_pi (Variable): [K x N] softmax outputs used to calculate the mixture params 
+            a_mu (Variable): [K x N] mean outputs from NN
+            a_sigma (Variable): [K x N] ln(std) outputs from NN
+            t (Variable): [N] training set
+        Returns:
+            loss (Variable): output of loss function
+        """
         self.save_for_backward(a_pi, a_mu, a_sigma, t)
         K = a_pi.size(1) #Number of components in mixture
         losses = th.zeros(K,t.size(0)).type(dtype)
@@ -186,25 +195,6 @@ class simpleNN():
             # loss3 = (1.0/th.pow(2.0*np.pi*var[:,2],0.5))*th.exp(-0.5*th.pow(y_t-y_pred[:,5], 2)/var[:,2])
 
             # loss = -th.sum(th.log(p1*loss1 + p2*loss2 + p3*loss3),0)
-
-            # print(loss, lossx)
-            # gamma0 = p1*loss1 + p2*loss2 + p3*loss3
-            # gamma1 = p1*loss1/gamma0
-            # gamma2 = p2*loss2/gamma0
-            # gamma3 = p3*loss3/gamma0
-
-            # grads = Variable(th.zeros(9,5).type(dtype))
-            # grads[0,:] = th.sum(hidden[:,:]*(p1 - gamma1),1)
-            # grads[1,:] = th.sum(hidden[:,:]*(p2 - gamma2),1) 
-            # grads[2,:] = th.sum(hidden[:,:]*(p3 - gamma3),1)
-
-            # grads[3,:] = th.sum(hidden[:,:]*(gamma1*(y_pred[:,3]-y_t)/var[:,0]),1)
-            # grads[4,:] = th.sum(hidden[:,:]*(gamma2*(y_pred[:,4]-y_t)/var[:,1]),1)
-            # grads[5,:] = th.sum(hidden[:,:]*(gamma3*(y_pred[:,5]-y_t)/var[:,2]),1)
-
-            # grads[6,:] = th.sum(hidden[:,:]*gamma1*(1 - th.pow(y_t - y_pred[:,3], 2)/var[:,0]),1)
-            # grads[7,:] = th.sum(hidden[:,:]*gamma2*(1 - th.pow(y_t - y_pred[:,4], 2)/var[:,1]),1)
-            # grads[8,:] = th.sum(hidden[:,:]*gamma3*(1 - th.pow(y_t - y_pred[:,5], 2)/var[:,2]),1)
             
             #Now lets compute out loss
             # err = loss.data

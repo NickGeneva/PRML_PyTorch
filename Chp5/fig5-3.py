@@ -1,7 +1,7 @@
 '''
 Nicholas Geneva
 ngeneva@nd.edu
-August 11, 2017
+August 25, 2017
 '''
 import sys
 
@@ -28,7 +28,6 @@ class BabyNet(th.nn.Module):
         self.linear1 = th.nn.Linear(D_in, H)
         self.f1 = th.nn.Tanh()
         self.linear2 = th.nn.Linear(H, D_out)
-        self.f2 = th.nn.Sigmoid()
 
     def forward(self, x):
         """
@@ -39,7 +38,7 @@ class BabyNet(th.nn.Module):
             out (th.DoubleTensor): [N x D_out] matrix of neural network outputs
         """
         lin1 = self.f1(self.linear1(x))
-        out = self.f2(self.linear2(lin1))
+        out = self.linear2(lin1)
         return out
 
     def hiddenForward(self, x):
@@ -70,9 +69,7 @@ class simpleNN():
 
         self.H = H
         self.lr = learning_rate
-        #Input: (N,C) where C = number of classes
-        #Target: Long(N) where each value is 0 <= targets[i] <= C-1
-        self.loss_fn = th.nn.CrossEntropyLoss(size_average=False)
+        self.loss_fn = th.nn.MSELoss(size_average=False)
     
     def trainNN(self, x_train, y_train, err_limit):
         """
@@ -97,7 +94,7 @@ class simpleNN():
             y_pred = self.model(x_t) #__call__()
 
             #Now lets compute out loss
-            loss = self.loss_fn(y_pred, y_t.long())
+            loss = self.loss_fn(y_pred, y_t)
             err = loss.data
             print(idx,err)
 
@@ -156,66 +153,32 @@ class simpleNN():
         loss = self.loss_fn(t_pred, t_test)
         return loss
 
-def generate2ClassData(N):
-    """Generates a set of synthetic data classification data discribed in Appendix A
+def generateTrainingData(N, std, func='para'):
+    """Generates a set of training data for several abitrary functions
     Args:
         N (Int) = Number of points in each class
+        std (Int) = standard deviation of the Y noise added to the data
+        func (String) = training function of choice (parabolic, sine, etc.)
     Returns:
-        X (th.DoubleTensor) = [2*N x 2] matrix of X and Y coords of target points
-        T (th.DoubleTensor) = [2*N x 2] matrix of binary classification target vectors
+        X (th.DoubleTensor) = [N] matrix of X and Y coords of target points
+        T (th.DoubleTensor) = [N] matrix of binary classification target vectors
     """
-    X_data = th.DoubleTensor(2*N, 2)
-    T_data = th.DoubleTensor(2*N, 2).zero_()
-
-    #Generate class 1 coordinates
-    mean = [-.25, 0]
-    covar = [[1.0, 1.0], [0, 1.0]] #variance
-    X_data[:N,:] = th.FloatTensor(np.random.multivariate_normal(mean, covar, N))
-
-    #Generate class 2 coordinates
-    mean = [1.0, -0.75]
-    covar = [[1, .8], [.8, 1]]  # diagonal covariance
-    mean2 = [1.0, 1]
-    covar2 = [[1.0, 1.0], [0, 1.0]]  # diagonal covariance
-    n = int(np.random.normal(N/2.0,5)) #Number of points from guassian 1
-    X_data[N:N+n,:] = th.FloatTensor(np.random.multivariate_normal(mean, covar, n))
-    X_data[N+n:,:] = th.FloatTensor(np.random.multivariate_normal(mean2, covar2, N-n))
-
-    #Target vector creation
-    T_data[:N, 0] = 1
-    T_data[N:, 1] = 1
+    X_data = th.linspace(-1,1,N).unsqueeze(1).type(th.DoubleTensor)
+    if(func == 'para'):
+        mu = X_data.pow(2)
+    elif(func == 'sine'):
+        mu = th.sin(np.pi*X_data)
+    elif(func == 'abs'):
+        mu = th.abs(X_data)
+    else:
+        mu = X_data > 0
+    
+    if(std > 0):
+        T_data = th.normal(mu,std).type(th.DoubleTensor)
+    else:
+        T_data = mu.type(th.DoubleTensor)
 
     return X_data, T_data
-
-def plotIdealFit(ax, xlim, ylim):
-    """Generates a set of synthetic data classification data discribed in Appendix A
-    Args:
-        N (Int) = Number of points in each class
-    Returns:
-        X (th.DoubleTensor) = [2*N x 2] matrix of X and Y coords of target points
-        T (th.DoubleTensor) = [2*N x 2] matrix of binary classification target vectors
-    """
-    x = np.linspace(xlim[0],xlim[1],150)
-    y = np.linspace(ylim[0],ylim[1],150)
-    X, Y = np.meshgrid(x, y)
-    Z = np.zeros(X.shape)
-    #Class 1
-    mean0 = [-.25, 0]
-    cov0 = [[1.0, 1.0], [0, 1.0]]
-    #Class 2
-    mean = [1.0, -0.75]
-    cov = [[1, .8], [.8, 1]]
-    mean2 = [0.75, 1]
-    cov2 = [[1.0, 1.0], [0, 1.0]]
-    
-    for (i,j), val in np.ndenumerate(X):
-        x = np.array([[X[i,j], Y[i,j]]])
-        Z[i,j] = -5*np.exp(-0.5*(x-mean0).dot(inv(cov0)).dot((x-mean0).T)) + \
-            5*np.exp(-0.5*(x-mean).dot(inv(cov)).dot((x-mean).T)) + \
-            5*np.exp(-0.5*(x-mean2).dot(inv(cov2)).dot((x-mean2).T))
-
-    #ax.contourf(X, Y, Z, 10)
-    ax.contour(X, Y, Z, levels = [-5,0,5], colors='g', linewidth=0.5)
 
 if __name__ == '__main__':
     plt.close('all')
@@ -223,63 +186,86 @@ if __name__ == '__main__':
     rc('text', usetex=True)
 
     #Set up subplots
-    f, ax = plt.subplots(1, 1, figsize=(7, 6))
-    f.suptitle('Figure 5.4 pg. 232', fontsize=14)
+    f, ax = plt.subplots(2, 2, figsize=(7, 6))
+    f.suptitle('Figure 5.3 pg. 231', fontsize=14)
     xlim, ylim = [-2.25,2.25], [-3,3]
 
-    N = 75 #Number of points in each class
-    X_train, T_train = generate2ClassData(N)
-    lr, err = 1e-1, 1e-5 #learning rate, error threshold
+    N = 50 #Number of points in each class
+    lr, err = 5e-4, 1e-6 #learning rate, error threshold
     
-    sNN = simpleNN(2, 2, 2, lr)
-    sNN.trainNN(X_train, T_train[:,0], err)
+    #Parabolic function
+    X_train, T_train = generateTrainingData(N,0,func='para')
+    X_test, T_test = generateTrainingData(100,0,func='para')
+    sNN = simpleNN(1, 3, 1, lr)
+    sNN.trainNN(X_train, T_train, err)
 
-    x = np.linspace(xlim[0],xlim[1],150)
-    y = np.linspace(ylim[0],ylim[1],150)
-    X, Y = np.meshgrid(x, y)
-    Z = np.zeros((3,X.shape[0],X.shape[1]))
+    y_pred = sNN.getTPred(X_test)
+    y_hidden = sNN.getHiddenUnits(X_test)
+    ax[0,0].plot(Variable(X_test).data.numpy(), y_pred.data.numpy(), '-r')
+    ax[0,0].scatter(Variable(X_train).data.numpy(), Variable(T_train).data.numpy(), c='b', marker='.')
+    ax[0,0].set_ylim([-0.1,1.1])
+    ax[0,0].set_title(r'$f(x)=x^{2}$')
+    #Plot hidden units on different Y-scale
+    ax0 = ax[0,0].twinx()
+    ax0.plot(Variable(X_test.expand(X_test.size(0),3)).data.numpy(), y_hidden.data.numpy(),ls='--')
+    ax0.set_yticks([])
 
-    for (i,j), val in np.ndenumerate(X):
-        x_test = th.DoubleTensor([[X[i,j], Y[i,j]]])
-        y_pred = sNN.getTPred(x_test).data[0].numpy()
-        
-        prob = y_pred[0]*(1-y_pred[1]) #Eq. 5.22 (not the most robust but it works)
-        Z[0,i,j] = prob
-        Z[1:,i,j] = sNN.getHiddenUnits(x_test).data.numpy() #Get hidden units for hidden unit boundaries
+    #Sine function
+    X_train, T_train = generateTrainingData(N,0,func='sine')
+    X_test, T_test = generateTrainingData(100,0,func='sine')
+    sNN = simpleNN(1, 3, 1, lr)
+    sNN.trainNN(X_train, T_train, err)
 
-    sNN.getHiddenUnits(x_test)
-    #Plot decision surface boundary
-    ax.contour(X, Y, Z[0], levels = [-3.0,0.5,3.0], colors='r', linewidth=0.5)
-    #Plot hidden activation function surface boundaries
-    CS = ax.contour(X, Y, Z[1], levels = [-1.0,0.5,2.0], colors='b', linewidth=0.25)
-    for c in CS.collections:
-        c.set_dashes([(0, (2.0, 2.0))])  
-    CS = ax.contour(X, Y, Z[2], levels = [-1.0,0.5,2.0], colors='b', linewidth=0.25)
-    for c in CS.collections:
-        c.set_dashes([(0, (2.0, 2.0))])
+    y_pred = sNN.getTPred(X_test)
+    y_hidden = sNN.getHiddenUnits(X_test)
+    ax[0,1].plot(Variable(X_test).data.numpy(), y_pred.data.numpy(), '-r')
+    ax[0,1].scatter(Variable(X_train).data.numpy(), Variable(T_train).data.numpy(), c='b', marker='.')
+    ax[0,1].set_ylim([-1.1,1.1])
+    ax[0,1].set_title(r'$f(x)=sin(x)$')
+    #Plot hidden units on different Y-scale
+    ax0 = ax[0,1].twinx()
+    ax0.plot(Variable(X_test.expand(X_test.size(0),3)).data.numpy(), y_hidden.data.numpy(),ls='--')
+    ax0.set_yticks([])
 
-    #Seperate out classes for plotting
-    X0 = np.zeros((N,2))
-    Y0 = np.zeros((N,2))
-    c1 = 0
-    for i in range(X_train.size(0)):
-        if(T_train[i,0] == 1): #Class 1
-            X0[c1, 0] = X_train[i,0]
-            Y0[c1, 0] = X_train[i,1]
-            c1 = c1 + 1
-        else: #Class 2
-            X0[i-c1, 1] = X_train[i,0]
-            Y0[i-c1, 1] = X_train[i,1]
+    #Abs function
+    X_train, T_train = generateTrainingData(N,0,func='abs')
+    X_test, T_test = generateTrainingData(100,0,func='abs')
+    sNN = simpleNN(1, 3, 1, lr)
+    sNN.trainNN(X_train, T_train, err)
 
-    ax.scatter(X0[:,0], Y0[:,0], marker='o', facecolors='none', edgecolors='b')
-    ax.scatter(X0[:,1], Y0[:,1], c='r', marker='x')
-    plotIdealFit(ax, xlim, ylim)
+    y_pred = sNN.getTPred(X_test)
+    y_hidden = sNN.getHiddenUnits(X_test)
+    ax[1,0].plot(Variable(X_test).data.numpy(), y_pred.data.numpy(), '-r')
+    ax[1,0].scatter(Variable(X_train).data.numpy(), Variable(T_train).data.numpy(), c='b', marker='.')
+    ax[1,0].set_ylim([-0.1,1.1])
+    ax[1,0].set_title(r'$f(x)=\left| x \right|$')
+    #Plot hidden units on different Y-scale
+    ax0 = ax[1,0].twinx()
+    ax0.plot(Variable(X_test.expand(X_test.size(0),3)).data.numpy(), y_hidden.data.numpy(),ls='--')
+    ax0.set_yticks([])
+
+    #Heaviside function
+    X_train, T_train = generateTrainingData(N,0,func='heavy')
+    X_test, T_test = generateTrainingData(100,0,func='heavy')
+    sNN = simpleNN(1, 3, 1, lr)
+    sNN.trainNN(X_train, T_train, err)
+
+    y_pred = sNN.getTPred(X_test)
+    y_hidden = sNN.getHiddenUnits(X_test)
+    ax[1,1].plot(Variable(X_test).data.numpy(), y_pred.data.numpy(), '-r')
+    ax[1,1].scatter(Variable(X_train).data.numpy(), Variable(T_train).data.numpy(), c='b', marker='.')
+    ax[1,1].set_ylim([-0.1,1.1])
+    ax[1,1].set_title(r'$f(x)=H(x)$')
+    #Plot hidden units on different Y-scale
+    ax0 = ax[1,1].twinx()
+    ax0.plot(Variable(X_test.expand(X_test.size(0),3)).data.numpy(), y_hidden.data.numpy(),ls='--')
+    ax0.set_yticks([])
+
+    for (i,j), ax0 in np.ndenumerate(ax):
+        ax0.set_xlim([-1.05,1.05])
+        ax0.set_xticks([]) 
+        ax0.set_yticks([]) 
     
-    ax.set_xlim(xlim)
-    ax.set_xticks([-2, -1, 0, 1, 2]) 
-    ax.set_ylim(ylim)
-    ax.set_yticks([-2, -1, 0, 1, 2])
-
     plt.tight_layout(pad=0.4, w_pad=0.5, h_pad=0.5, rect=[0,0, 1, 0.9])
-    #plt.savefig('Figure5_04.png')
+    #plt.savefig('Figure5_03.png')
     plt.show()
