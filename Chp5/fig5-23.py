@@ -53,6 +53,18 @@ class BabyNet(th.nn.Module):
         lin1 = self.f1(self.linear1(x))
         return lin1
 
+    def getOutputActivations(self, x):
+        """
+        Calculates and returns the output activations for the neural network
+        Args:
+            x (th.DoubleTensor): [N x D_in] column matrix of training inputs
+        Returns:
+            out (th.DoubleTensor): [N x D_out] matrix of neural network output activations
+        """
+        lin1 = self.f1(self.linear1(x))
+        out = self.linear2(lin1)
+        return out
+
 class simpleNN():
     def __init__(self, D_in, H, D_out, learning_rate):
         """Class for a simple 2 layer neural network
@@ -112,7 +124,7 @@ class simpleNN():
                 param.data -= self.lr * param.grad.data #Using Batch sharpest decent
 
             idx+=1
-            if(idx > 1e5): #Give up after 1e6 attempts to train
+            if(idx > 5e4): #Give up after 1e6 attempts to train
                 print('Interation break')
                 break
 
@@ -140,21 +152,20 @@ class simpleNN():
         
         hess = self.getHessian(x_train, y_train)
         e, v = th.eig(self.beta*hess.data, eigenvectors=False)
-        
-        
+              
         d = 0
         for param in self.model.parameters():
             target = Variable(th.zeros(param.size())).type(dtype)
             d += self.reg_fn(param, target).data
         
-        for i in range(10):
+        for i in range(20):
             gamma = th.sum(e[:,0]/(self.alpha + e[:,0]), 0)
             self.alpha = (gamma/d)[0]
             print(self.alpha)
 
 
         print('Alpha Updated to: '+str(self.alpha))
-        string = raw_input("Press Enter to continue...")
+        #string = raw_input("Press Enter to continue...")
 
     def getHessian(self, x_train, t_train):
         """
@@ -284,6 +295,18 @@ class simpleNN():
         t_pred = self.model(x_t)
         return t_pred
 
+    def getOutputActivations(self, x_train):
+        """
+        Get the prediction of the NN for a given set of points
+        Args:
+            x_train (th.DoubleTensor): [N x D_in] matrix of training inputs
+        Returns:
+            a_out (Variable): [N x D_out]
+        """
+        x_t = Variable(x_train, requires_grad=False)
+        a_out = self.model.getOutputActivations(x_t)
+        return a_out
+
     def getHiddenUnits(self, x_train):
         """
         Get the hidden units 
@@ -341,6 +364,57 @@ class simpleNN():
             if isinstance(x, th.nn.Linear):
                 x.weight.data = th.normal(means=th.zeros(x.weight.size())).type(dtype)
                 x.bias.data = th.zeros(x.bias.size()).type(dtype)
+
+    def getPosterior(self, x_train, t_train, x_test):
+        """
+        Calculates the refined posterior probabilities for a set of points
+        (recommended batch to prevent recalc. of hessian)
+        Args:
+            x_test (th.DoubleTensor): [N x D_in] matrix of test set inputs to find posterior
+        Returns:
+            post (th.DoubleTensor): [N x D_out] matrix containing probabilites of the respective classes
+        """
+        #First crunch the hessian for out current training data
+        hess = self.getHessian(x_train, t_train)
+        A = self.alpha*th.eye(hess.size(0)).type(dtype) + self.beta*self.getHessian(x_train, t_train).data
+        A_i = th.inverse(A)
+        #Next lets get our gradient vectors
+        N = 0
+        for param in self.model.parameters():
+            N += sum(len(row) for row in param)
+        b = th.zeros((N,1)).type(dtype)
+        #loss = self.getLoss(x_train, t_train)
+        # Zero the gradients before running the backward pass.
+        # self.model.zero_grad()
+        # loss.backward()
+        # i = 0
+        # for param in self.model.parameters():
+        #     b[i:i+param.grad.data.numel(), 0] =  param.grad.data.view(param.grad.data.numel())
+        #     i = i + param.grad.data.numel()
+        # #Now calculate sigma_a^2
+        # sigma2 = th.mm(b.t(),th.inverse(A))
+        # sigma2 = th.mm(sigma2, b)
+        #Compute k(sigma2)
+        #k = (1 + (np.pi*sigma2)/8)**(-0.5)
+        k = Variable(th.DoubleTensor((x_test.size(0))))
+        #Get the output activations a_out for all the test points
+        a_out = self.model.getOutputActivations(Variable(x_test, requires_grad=False))
+        for idx, a0 in enumerate(a_out):
+            self.model.zero_grad()
+            param_grads = th.autograd.grad(a0, self.model.parameters(), create_graph=True)
+            #Find gradient of the output activation wrt the weights
+            i = 0
+            for grad0 in param_grads:
+                b[i:i+grad0.data.numel(), 0] =  grad0.data.view(grad0.data.numel())
+                i = i + grad0.data.numel()
+            #Now calculate sigma_a^2
+            sigma2 = th.mm(b.t(),A_i)
+            sigma2 = th.mm(sigma2, b)
+            #Compute k(sigma2)
+            k[idx] = (1 + (np.pi*sigma2)/8)**(-0.5)
+            
+        func = th.nn.Sigmoid()
+        return func(k.unsqueeze(1)*a_out).data
 
 def generate2ClassData(N):
     """Generates a set of synthetic data classification data discribed in Appendix A
@@ -409,30 +483,24 @@ if __name__ == '__main__':
     rc('text', usetex=True)
 
     #Set up subplots
-    f, ax = plt.subplots(1, 1, figsize=(7, 6))
-    f.suptitle('Figure 5.22 pg. 283', fontsize=14)
+    f, ax = plt.subplots(1, 2, figsize=(8, 4))
+    f.suptitle('Figure 5.23 pg. 284', fontsize=14)
     xlim, ylim = [-2.25,2.25], [-3,3]
 
-    N = 100 #Number of points in each class
+    N = 50 #Number of points in each class
     X_train, T_train = generate2ClassData(N)
     D_in, H, D_out = 2, 8, 1
-    lr, err = 1e-4, 1e-6 #learning rate, error threshold
+    lr, err = 5e-4, 1e-6 #learning rate, error threshold
     
     sNN = simpleNN(D_in, H, D_out, lr)
     sNN.trainNNLikelyhood(X_train, T_train[:,0], err)
 
-    x = np.linspace(xlim[0],xlim[1],150)
-    y = np.linspace(ylim[0],ylim[1],150)
+    x = np.linspace(xlim[0],xlim[1],50)
+    y = np.linspace(ylim[0],ylim[1],50)
     X, Y = np.meshgrid(x, y)
     Z = np.zeros((X.shape[0],X.shape[1]))
-    for (i,j), val in np.ndenumerate(X):
-        x_test = th.DoubleTensor([[X[i,j], Y[i,j]]])
-        Z[i,j] = sNN.getTPred(x_test).data.numpy()
 
-    #Plot decision surface boundary
-    ax.contour(X, Y, Z, levels = [-3.0,0.5,3.0], colors='k', linewidth=0.5)
-
-    for i in range(2):
+    for i in range(3):
         sNN.priorTrainNN(X_train, T_train[:,0], err)
         sNN.trainNNLikelyhood(X_train, T_train[:,0], err)
     
@@ -441,7 +509,13 @@ if __name__ == '__main__':
         Z[i,j] = sNN.getTPred(x_test).data.numpy()
 
     #Plot decision surface boundary
-    ax.contour(X, Y, Z, levels = [-3.0,0.5,3.0], colors='r', linewidth=0.5)
+    ax[0].contour(X, Y, Z, levels = [0,0.1,0.3,0.5,0.7,0.9,1.0], cmap=plt.cm.brg, linewidth=0.5)
+
+    x_test = th.DoubleTensor([X.flatten(), Y.flatten()]).t()
+    x_out = sNN.getPosterior(X_train, T_train[:,0], x_test)
+
+    Z = x_out.view(X.shape[0], X.shape[1])
+    ax[1].contour(X, Y, Z.numpy(), levels = [0,0.1,0.3,0.5,0.7,0.9,1.0], cmap=plt.cm.brg, linewidth=0.5)
 
     #Seperate out classes for plotting
     X0 = np.zeros((N,2))
@@ -455,16 +529,17 @@ if __name__ == '__main__':
         else: #Class 2
             X0[i-c1, 1] = X_train[i,0]
             Y0[i-c1, 1] = X_train[i,1]
-
-    ax.scatter(X0[:,0], Y0[:,0], marker='o', facecolors='none', edgecolors='b')
-    ax.scatter(X0[:,1], Y0[:,1], c='r', marker='x')
-    plotIdealFit(ax, xlim, ylim)
     
-    ax.set_xlim(xlim)
-    ax.set_xticks([-2, -1, 0, 1, 2]) 
-    ax.set_ylim(ylim)
-    ax.set_yticks([-2, -1, 0, 1, 2])
+    for n, ax0 in np.ndenumerate(ax):
+        ax0.scatter(X0[:,0], Y0[:,0], marker='o', facecolors='none', edgecolors='b')
+        ax0.scatter(X0[:,1], Y0[:,1], c='r', marker='x')
+        #plotIdealFit(ax0, xlim, ylim)
+        
+        ax0.set_xlim(xlim)
+        ax0.set_xticks([-2, -1, 0, 1, 2]) 
+        ax0.set_ylim(ylim)
+        ax0.set_yticks([-2, -1, 0, 1, 2])
 
     plt.tight_layout(pad=0.4, w_pad=0.5, h_pad=0.5, rect=[0,0, 1, 0.9])
-    #plt.savefig('Figure5_22.png')
+    #plt.savefig('Figure5_23.png')
     plt.show()
