@@ -131,36 +131,30 @@ class simpleNN():
         print('Training Loss for M='+str(self.H)+': '+str(loss.data.numpy()))
         print('Alpha: '+str(self.alpha))
 
-    def priorTrainNN(self, x_train, y_train, err_limit):
+    def priorTrainNN(self, x_train, y_train):
         """
-        Conduct one interation of training of the NN
+        Updates the prior of the Bayesian NN
         Args:
             X_train (th.DoubleTensor): [N x D_in] column matrix of training inputs
             Y_train (th.DoubleTensor): [N x D_out] column matrix of training outputs
-            err_limit (float): error threshold for training the NN
         """
         x_t = Variable(x_train)
         y_t = Variable(y_train, requires_grad=False)
-        idx = 0
-
-        y_pred = self.model(x_t)
-
-        loss = self.getLoss(x_train, y_train) 
-        grad_params = th.autograd.grad(loss, self.model.parameters(), create_graph=True)
-        #for grad in grad_params:
-            #print(grad.size())
         
+        #Get the hessian of the error function and its eigen values
         hess = self.getHessian(x_train, y_train)
         e, v = th.eig(self.beta*hess.data, eigenvectors=False)
-              
+
+        #Compute (w^t)*(w)   
         d = 0
         for param in self.model.parameters():
             target = Variable(th.zeros(param.size())).type(dtype)
             d += self.reg_fn(param, target).data
         
+        #Iterate the alpha calculations to hopefully converge (if hessian is nice to us)
         for i in range(20):
-            gamma = th.sum(e[:,0]/(self.alpha + e[:,0]), 0)
-            self.alpha = (gamma/d)[0]
+            gamma = th.sum(e[:,0]/(self.alpha + e[:,0]), 0) #Eq. 5.179
+            self.alpha = (gamma/d)[0] #Eq. 5.178
             print(self.alpha)
 
 
@@ -181,11 +175,9 @@ class simpleNN():
         for param in self.model.parameters():
             N += sum(len(row) for row in param)
         hess = Variable(th.zeros((N,N))).type(dtype)
-        hess_diag = Variable(th.zeros((N,N))).type(dtype)
 
-        loss = self.getLoss2(x_train, t_train)
-        grad_params0 = th.autograd.grad(loss, self.model.parameters(), create_graph=True)
-
+        #Interate over every single weight value and compute second order finite difference
+        #of their gradients to obtain second derivatives
         ni, nj = 0, 0
         for k, v in self.model.state_dict().iteritems():
             if('weight' in k.lower()):
@@ -193,19 +185,19 @@ class simpleNN():
                     for j, elem in enumerate(row):
                         eps = v[i,j]*1e-8
                         v[i,j] = v[i,j] - eps
-                        #Compute loss
+                        #Compute loss of negative pertabation
                         loss = self.getLoss2(x_train, t_train) 
                         #backprop
                         grad_params2 = th.autograd.grad(loss, self.model.parameters(), create_graph=True)
                         
                         v[i,j] = v[i,j] + 2*eps
-                        #Compute loss
+                        #Compute loss of positive pertabation
                         loss = self.getLoss2(x_train, t_train) 
                         #backprop
                         grad_params1 = th.autograd.grad(loss, self.model.parameters(), create_graph=True)
                         #Finite difference
                         grad_params = np.subtract(grad_params1, grad_params2)
-                        #Flatten and store in hess
+                        #Flatten and store in hess matrix
                         ni = 0
                         for grad in grad_params:
                             hess[ni:ni +grad.numel(), nj] = grad.view(grad.numel())/(2*eps)
@@ -213,18 +205,18 @@ class simpleNN():
                         #Reset weight to original value
                         v[i,j] = v[i,j] - eps
                         nj += 1
-
+            #Since biases have 1D gradients we need to treat them a little special
             if('bias' in k.lower()):
                 for i, elem in enumerate(v):
                     eps = v[i]*1e-8
                     v[i] = v[i] - eps
-                    #Compute loss
+                    #Compute loss of negative pertabation
                     loss = self.getLoss2(x_train, t_train) 
                     #backprop
                     grad_params2 = th.autograd.grad(loss, self.model.parameters(), create_graph=True)
 
                     v[i] = v[i] + 2*eps
-                    #Compute loss
+                    #Compute loss positive pertabation
                     loss = self.getLoss2(x_train, t_train) 
                     #backprop
                     grad_params1 = th.autograd.grad(loss, self.model.parameters(), create_graph=True)
@@ -238,48 +230,6 @@ class simpleNN():
                     #Reset weight to original value
                     v[i] = v[i] - eps
                     nj += 1
-
-        #print(hess)
-        loss0 = self.getLoss2(x_train, t_train)
-        
-        #Full finite difference diag check
-        ni = 0
-        for k, v in self.model.state_dict().iteritems():
-            if('weight' in k.lower()):
-                for i, row in enumerate(v):
-                    for j, elem in enumerate(row):
-                        eps = v[i,j]*1e-5
-                        v[i,j] = v[i,j] + 2*eps
-                        #Compute loss
-                        loss1 = self.getLoss2(x_train, t_train)
-                        
-                        v[i,j] = v[i,j] - 4*eps
-                        #Compute loss
-                        loss2 = self.getLoss2(x_train, t_train)
-
-                        loss = 1/(4*(eps**2))*(loss1 - 2*loss0 + loss2)
-                        v[i,j] = v[i,j] + 2*eps #Reset weight
-                        
-                        hess_diag[ni,ni] = loss
-                        ni += 1
-                        
-            if('bias' in k.lower()):
-                for i, elem in enumerate(v):
-                    eps = v[i]*1e-5
-                    v[i] = v[i] + 2*eps
-                    #Compute loss
-                    loss1 = self.getLoss2(x_train, t_train)
-                    
-                    v[i] = v[i] - 4*eps
-                    #Compute loss
-                    loss2 = self.getLoss2(x_train, t_train)
-
-                    loss = 1/(4*(eps**2))*(loss1 - 2*loss0 + loss2)
-                    v[i] = v[i] + 2*eps #Reset weight
-                    
-                    hess_diag[ni,ni] = loss
-                    ni += 1
-        #print(hess_diag)
 
         return hess
 
@@ -359,15 +309,9 @@ class simpleNN():
         loss = self.loss_fn(y_pred.squeeze(), y_t)#Likelyhood
         return loss
 
-    def resetWeights(self):
-        for x in self.model.modules():
-            if isinstance(x, th.nn.Linear):
-                x.weight.data = th.normal(means=th.zeros(x.weight.size())).type(dtype)
-                x.bias.data = th.zeros(x.bias.size()).type(dtype)
-
     def getPosterior(self, x_train, t_train, x_test):
         """
-        Calculates the refined posterior probabilities for a set of points
+        Calculates the refined posterior probabilities for a set of points, see page 283 in Bishop
         (recommended batch to prevent recalc. of hessian)
         Args:
             x_test (th.DoubleTensor): [N x D_in] matrix of test set inputs to find posterior
@@ -382,23 +326,13 @@ class simpleNN():
         N = 0
         for param in self.model.parameters():
             N += sum(len(row) for row in param)
+        
         b = th.zeros((N,1)).type(dtype)
-        #loss = self.getLoss(x_train, t_train)
-        # Zero the gradients before running the backward pass.
-        # self.model.zero_grad()
-        # loss.backward()
-        # i = 0
-        # for param in self.model.parameters():
-        #     b[i:i+param.grad.data.numel(), 0] =  param.grad.data.view(param.grad.data.numel())
-        #     i = i + param.grad.data.numel()
-        # #Now calculate sigma_a^2
-        # sigma2 = th.mm(b.t(),th.inverse(A))
-        # sigma2 = th.mm(sigma2, b)
-        #Compute k(sigma2)
-        #k = (1 + (np.pi*sigma2)/8)**(-0.5)
         k = Variable(th.DoubleTensor((x_test.size(0))))
+        
         #Get the output activations a_out for all the test points
         a_out = self.model.getOutputActivations(Variable(x_test, requires_grad=False))
+        #Now we need to compute the gradients and k values for each point
         for idx, a0 in enumerate(a_out):
             self.model.zero_grad()
             param_grads = th.autograd.grad(a0, self.model.parameters(), create_graph=True)
@@ -407,12 +341,13 @@ class simpleNN():
             for grad0 in param_grads:
                 b[i:i+grad0.data.numel(), 0] =  grad0.data.view(grad0.data.numel())
                 i = i + grad0.data.numel()
-            #Now calculate sigma_a^2
+            #Now calculate sigma_a^2 (Eq. 4.188)
             sigma2 = th.mm(b.t(),A_i)
             sigma2 = th.mm(sigma2, b)
-            #Compute k(sigma2)
+            #Compute k(sigma2) (Eq. 4.154)
             k[idx] = (1 + (np.pi*sigma2)/8)**(-0.5)
             
+        #Finally use the sigmoid approximation (Eq. 5.190)
         func = th.nn.Sigmoid()
         return func(k.unsqueeze(1)*a_out).data
 
@@ -492,16 +427,17 @@ if __name__ == '__main__':
     D_in, H, D_out = 2, 8, 1
     lr, err = 5e-4, 1e-6 #learning rate, error threshold
     
-    sNN = simpleNN(D_in, H, D_out, lr)
-    sNN.trainNNLikelyhood(X_train, T_train[:,0], err)
-
+    #Set up meshgrids for contours
     x = np.linspace(xlim[0],xlim[1],50)
     y = np.linspace(ylim[0],ylim[1],50)
     X, Y = np.meshgrid(x, y)
     Z = np.zeros((X.shape[0],X.shape[1]))
 
+    #Train NN
+    sNN = simpleNN(D_in, H, D_out, lr)
+    sNN.trainNNLikelyhood(X_train, T_train[:,0], err)
     for i in range(3):
-        sNN.priorTrainNN(X_train, T_train[:,0], err)
+        sNN.priorTrainNN(X_train, T_train[:,0])
         sNN.trainNNLikelyhood(X_train, T_train[:,0], err)
     
     for (i,j), val in np.ndenumerate(X):
@@ -511,6 +447,7 @@ if __name__ == '__main__':
     #Plot decision surface boundary
     ax[0].contour(X, Y, Z, levels = [0,0.1,0.3,0.5,0.7,0.9,1.0], cmap=plt.cm.brg, linewidth=0.5)
 
+    #Now calculate the posterior with accounting for variance in the activations
     x_test = th.DoubleTensor([X.flatten(), Y.flatten()]).t()
     x_out = sNN.getPosterior(X_train, T_train[:,0], x_test)
 
@@ -541,5 +478,5 @@ if __name__ == '__main__':
         ax0.set_yticks([-2, -1, 0, 1, 2])
 
     plt.tight_layout(pad=0.4, w_pad=0.5, h_pad=0.5, rect=[0,0, 1, 0.9])
-    #plt.savefig('Figure5_23.png')
+    #plt.savefig('Figure5_24.png')
     plt.show()
