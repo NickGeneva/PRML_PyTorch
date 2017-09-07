@@ -425,7 +425,7 @@ if __name__ == '__main__':
     N = 50 #Number of points in each class
     X_train, T_train = generate2ClassData(N)
     D_in, H, D_out = 2, 8, 1
-    lr, err = 5e-4, 1e-6 #learning rate, error threshold
+    lr, err = 1e-3, 1e-3 #learning rate, error threshold
     
     #Set up meshgrids for contours
     x = np.linspace(xlim[0],xlim[1],50)
@@ -445,14 +445,16 @@ if __name__ == '__main__':
         Z[i,j] = sNN.getTPred(x_test).data.numpy()
 
     #Plot decision surface boundary
-    ax[0].contour(X, Y, Z, levels = [0,0.1,0.3,0.5,0.7,0.9,1.0], cmap=plt.cm.brg, linewidth=0.5)
+    CS = ax[0].contour(X, Y, Z, levels = [0,0.1,0.3,0.5,0.7,0.9,1.0], cmap=plt.cm.brg, linewidth=0.5)
+    ax[0].clabel(CS, inline=1, fontsize=10)
 
     #Now calculate the posterior with accounting for variance in the activations
     x_test = th.DoubleTensor([X.flatten(), Y.flatten()]).t()
     x_out = sNN.getPosterior(X_train, T_train[:,0], x_test)
 
     Z = x_out.view(X.shape[0], X.shape[1])
-    ax[1].contour(X, Y, Z.numpy(), levels = [0,0.1,0.3,0.5,0.7,0.9,1.0], cmap=plt.cm.brg, linewidth=0.5)
+    CS = ax[1].contour(X, Y, Z.numpy(), levels = [0,0.1,0.3,0.5,0.7,0.9,1.0], cmap=plt.cm.brg, linewidth=0.5)
+    ax[1].clabel(CS, inline=1, fontsize=10)
 
     #Seperate out classes for plotting
     X0 = np.zeros((N,2))
@@ -478,5 +480,5 @@ if __name__ == '__main__':
         ax0.set_yticks([-2, -1, 0, 1, 2])
 
     plt.tight_layout(pad=0.4, w_pad=0.5, h_pad=0.5, rect=[0,0, 1, 0.9])
-    #plt.savefig('Figure5_24.png')
+    #plt.savefig('Figure5_23.png')
     plt.show()
