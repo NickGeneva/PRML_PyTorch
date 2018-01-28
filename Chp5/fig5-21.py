@@ -182,7 +182,8 @@ class simpleNN():
                 param.data -= self.lr * param.grad.data #Using Batch sharpest decent
             
             print("Index: "+str(idx)+", loss="+str(loss.data[0]))
-            #First calculate mixing coefficients
+            
+	    #First calculate mixing coefficients
             # pi_t = th.exp(y_pred[:,0])+th.exp(y_pred[:,1])+th.exp(y_pred[:,2])
             # p1 = th.exp(y_pred[:,0])/pi_t
             # p2 = th.exp(y_pred[:,1])/pi_t
@@ -208,7 +209,7 @@ class simpleNN():
             #     param.data -= self.lr * param.grad.data #Using Batch sharpest decent
 
             idx+=1
-            if(idx > 5e4): #Give up after 1e6 attempts to train
+            if(idx > 5e4): #Give up after 5e4 attempts to train
                 print('Interation break')
                 break
 
